@@ -5,6 +5,29 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] - 2024-11-18
+
+### Adicionado
+- **Sistema completo de logging** com saída configurável
+  - Logging de todas as requisições HTTP e respostas
+  - Logging de operações de login, criação de usuário, alteração de senha
+  - Logging de erros de conexão e validação
+  - Logging de exceções com stack trace completo
+  - Rotação diária de logs automática
+
+- **Variáveis de ambiente para controle de logs**:
+  - `QUBE_CLI_LOG_FILE`: Caminho completo customizado para arquivo de log
+  - `QUBE_CLI_LOG_DIR`: Diretório customizado para logs (padrão: ~/.qube_cli/logs)
+  - `QUBE_CLI_LOG_LEVEL`: Nível de log (DEBUG, INFO, WARNING, ERROR)
+  - `QUBE_CLI_DISABLE_LOGS`: Desabilitar logs em arquivo completamente
+  - `QUBE_CLI_DEBUG`: Exibir logs também no console (stdout)
+
+### Melhorado
+- CLI agora exibe o caminho do arquivo de log no cabeçalho
+- Mensagem "Logs: Desabilitados" quando logs estão desabilitados
+- Documentação completa de configuração de logs no README
+- .gitignore atualizado para excluir arquivos de log
+
 ## [1.2.0] - 2024-11-18
 
 ### Melhorado
