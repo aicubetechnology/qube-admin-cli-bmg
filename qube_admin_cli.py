@@ -89,7 +89,7 @@ class QubeAdminCLI:
         return f"{API_BASE_URL}/api/{API_VERSION}/{endpoint}"
     
     def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None, 
-                      require_auth: bool = True) -> Optional[Dict]:
+                      require_auth: bool = True, params: Optional[Dict] = None) -> Optional[Dict]:
         """Faz requisição HTTP para a API"""
         url = self._make_url(endpoint)
         
@@ -97,13 +97,23 @@ class QubeAdminCLI:
         logger.info(f"Request: {method} {endpoint}")
         if data and endpoint != "auth/login":  # Não logar dados de login
             logger.debug(f"Data: {data}")
+        if params:
+            logger.debug(f"Params: {params}")
         
         if require_auth and self.token:
             self.session.headers.update({"Authorization": f"Bearer {self.token}"})
         
+        # Debug mode
+        debug_mode = os.getenv("QUBE_CLI_DEBUG", "false").lower() == "true"
+        if debug_mode:
+            print(f"🔍 DEBUG - URL: {url}")
+            print(f"🔍 DEBUG - Method: {method}")
+            print(f"🔍 DEBUG - Params: {params or data}")
+            print(f"🔍 DEBUG - Has token: {bool(self.token)}")
+        
         try:
             if method.upper() == "GET":
-                response = self.session.get(url, params=data, timeout=30)
+                response = self.session.get(url, params=params or data, timeout=30)
             elif method.upper() == "POST":
                 response = self.session.post(url, json=data, timeout=30)
             elif method.upper() == "PUT":
@@ -116,11 +126,15 @@ class QubeAdminCLI:
             
             if response.status_code in [200, 201, 204]:
                 logger.info(f"Response: {response.status_code} {method} {endpoint} - Success")
+                if debug_mode:
+                    print(f"🔍 DEBUG - Status Code: {response.status_code}")
                 if response.status_code == 204:
                     return {"success": True}
                 try:
                     result = response.json() if response.text else {"success": True}
                     logger.debug(f"Response data: {result}")
+                    if debug_mode:
+                        print(f"🔍 DEBUG - Response JSON keys: {result.keys() if isinstance(result, dict) else type(result)}")
                     return result
                 except json.JSONDecodeError as e:
                     logger.warning(f"JSON decode error: {e}")
@@ -373,10 +387,27 @@ class QubeAdminCLI:
         if self.user_info and self.user_info.get("company_id"):
             params["company_id"] = self.user_info.get("company_id")
         
-        response = self._make_request("GET", "admin/users", params)
+        logger.info(f"Listando usuários com params: {params}")
+        response = self._make_request("GET", "admin/users", params=params)
         
-        if response and "users" in response:
-            return response["users"]
+        logger.debug(f"Response type: {type(response)}, content: {response}")
+        
+        if response:
+            # Debug: mostrar estrutura da resposta
+            print(f"🔍 DEBUG - Tipo de resposta: {type(response)}")
+            print(f"🔍 DEBUG - Chaves da resposta: {response.keys() if isinstance(response, dict) else 'Não é dict'}")
+            
+            # Verificar diferentes estruturas possíveis
+            if isinstance(response, list):
+                return response
+            elif isinstance(response, dict):
+                if "users" in response:
+                    return response["users"]
+                elif "data" in response:
+                    return response["data"]
+                else:
+                    print(f"🔍 DEBUG - Resposta completa: {response}")
+        
         return None
     
     def listar_agents(self) -> Optional[list]:
