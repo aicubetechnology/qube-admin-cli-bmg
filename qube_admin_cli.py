@@ -8,6 +8,8 @@ import requests
 import json
 import sys
 import os
+import logging
+from datetime import datetime
 from getpass import getpass
 from typing import Optional, Dict, Any
 
@@ -16,6 +18,50 @@ from typing import Optional, Dict, Any
 API_BASE_URL = os.getenv("API_HOST", os.getenv("QUBE_API_URL", "https://api.qube.aicube.ca"))
 API_VERSION = "v1"
 
+# Configurações de Log
+# Variáveis de ambiente disponíveis:
+# - QUBE_CLI_LOG_FILE: Caminho completo do arquivo de log (ex: /var/log/qube_cli.log)
+# - QUBE_CLI_LOG_DIR: Diretório para logs (padrão: ~/.qube_cli/logs)
+# - QUBE_CLI_LOG_LEVEL: Nível de log (DEBUG, INFO, WARNING, ERROR) (padrão: INFO)
+# - QUBE_CLI_DISABLE_LOGS: Define como "true" para desabilitar logs em arquivo
+# - QUBE_CLI_DEBUG: Define como "true" para mostrar logs no console também
+
+DISABLE_LOGS = os.getenv("QUBE_CLI_DISABLE_LOGS", "false").lower() == "true"
+LOG_LEVEL = os.getenv("QUBE_CLI_LOG_LEVEL", "INFO").upper()
+
+# Determinar arquivo de log
+if os.getenv("QUBE_CLI_LOG_FILE"):
+    LOG_FILE = os.path.expanduser(os.getenv("QUBE_CLI_LOG_FILE"))
+    LOG_DIR = os.path.dirname(LOG_FILE)
+else:
+    LOG_DIR = os.getenv("QUBE_CLI_LOG_DIR", os.path.expanduser("~/.qube_cli/logs"))
+    LOG_FILE = os.path.join(LOG_DIR, f"qube_cli_{datetime.now().strftime('%Y%m%d')}.log")
+
+# Criar diretório de logs se não existir e se logs estiverem habilitados
+if not DISABLE_LOGS:
+    os.makedirs(LOG_DIR, exist_ok=True)
+
+# Configurar logging
+handlers = []
+if not DISABLE_LOGS:
+    handlers.append(logging.FileHandler(LOG_FILE, encoding='utf-8'))
+
+# Adicionar handler de console se debug estiver habilitado
+if os.getenv("QUBE_CLI_DEBUG", "false").lower() == "true":
+    handlers.append(logging.StreamHandler(sys.stdout))
+
+# Se não houver handlers, adicionar NullHandler para evitar warnings
+if not handlers:
+    handlers.append(logging.NullHandler())
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=handlers
+)
+
+logger = logging.getLogger("QubeCLI")
+
 
 class QubeAdminCLI:
     def __init__(self):
@@ -23,6 +69,8 @@ class QubeAdminCLI:
         self.user_info: Optional[Dict[str, Any]] = None
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
+        logger.info(f"CLI iniciada. API: {API_BASE_URL}")
+        logger.info(f"Log file: {LOG_FILE}")
     
     def _make_url(self, endpoint: str) -> str:
         """Constrói a URL completa da API"""
@@ -32,6 +80,11 @@ class QubeAdminCLI:
                       require_auth: bool = True) -> Optional[Dict]:
         """Faz requisição HTTP para a API"""
         url = self._make_url(endpoint)
+        
+        # Log da requisição (sem dados sensíveis)
+        logger.info(f"Request: {method} {endpoint}")
+        if data and endpoint != "auth/login":  # Não logar dados de login
+            logger.debug(f"Data: {data}")
         
         if require_auth and self.token:
             self.session.headers.update({"Authorization": f"Bearer {self.token}"})
@@ -50,11 +103,15 @@ class QubeAdminCLI:
                 return None
             
             if response.status_code in [200, 201, 204]:
+                logger.info(f"Response: {response.status_code} {method} {endpoint} - Success")
                 if response.status_code == 204:
                     return {"success": True}
                 try:
-                    return response.json() if response.text else {"success": True}
-                except json.JSONDecodeError:
+                    result = response.json() if response.text else {"success": True}
+                    logger.debug(f"Response data: {result}")
+                    return result
+                except json.JSONDecodeError as e:
+                    logger.warning(f"JSON decode error: {e}")
                     print(f"⚠️  Resposta da API não está em formato JSON válido")
                     return {"success": True, "raw_response": response.text}
             else:
@@ -65,6 +122,9 @@ class QubeAdminCLI:
                     error_data = {"detail": response.text or "Erro desconhecido"}
                 
                 error_detail = error_data.get('detail', error_data.get('message', str(error_data)))
+                
+                # Log do erro
+                logger.error(f"Response: {response.status_code} {method} {endpoint} - Error: {error_detail}")
                 
                 # Mensagens mais amigáveis por código de status
                 if response.status_code == 401:
@@ -94,6 +154,7 @@ class QubeAdminCLI:
                 return None
                 
         except requests.exceptions.ConnectionError as e:
+            logger.error(f"Connection error: {method} {endpoint} - {e}")
             print(f"\n❌ Erro de conexão com a API")
             print(f"🌐 URL: {API_BASE_URL}")
             print(f"💡 Dica: Verifique se:")
@@ -102,16 +163,20 @@ class QubeAdminCLI:
             print(f"   • Você tem acesso à rede")
             return None
         except requests.exceptions.Timeout:
+            logger.error(f"Timeout: {method} {endpoint}")
             print(f"\n❌ Timeout na requisição (>30s)")
             print(f"💡 Dica: A API pode estar lenta ou indisponível")
             return None
         except requests.exceptions.RequestException as e:
+            logger.error(f"Request exception: {method} {endpoint} - {e}")
             print(f"\n❌ Erro na requisição HTTP: {e}")
             return None
         except KeyboardInterrupt:
+            logger.warning(f"Operation cancelled by user: {method} {endpoint}")
             print(f"\n\n⚠️  Operação cancelada pelo usuário")
             raise  # Re-lança para ser tratado no nível superior
         except Exception as e:
+            logger.exception(f"Unexpected error: {method} {endpoint}")
             print(f"\n❌ Erro inesperado: {type(e).__name__}: {e}")
             print(f"💡 Dica: Se o problema persistir, reporte este erro")
             return None
@@ -126,8 +191,11 @@ class QubeAdminCLI:
             email = input("📧 Email: ").strip()
             
             if not email:
+                logger.warning("Login attempt with empty email")
                 print("❌ Email não pode ser vazio")
                 return False
+            
+            logger.info(f"Login attempt for user: {email}")
             
             password = getpass("🔑 Senha: ")
             
@@ -154,12 +222,14 @@ class QubeAdminCLI:
             
             if response and "access_token" in response:
                 self.token = response["access_token"]
+                logger.info(f"Login successful for user: {email}")
                 print("✅ Login realizado com sucesso!\n")
                 
                 # Buscar informações do usuário
                 user_response = self._make_request("GET", "users/me")
                 if user_response:
                     self.user_info = user_response
+                    logger.info(f"User info loaded: {self.user_info.get('name')} - Role: {self.user_info.get('role')}")
                     print(f"👤 Usuário: {self.user_info.get('name', 'N/A')}")
                     print(f"📧 Email: {self.user_info.get('email', 'N/A')}")
                     print(f"🏢 Empresa: {self.user_info.get('company_name', 'N/A')}")
@@ -167,6 +237,7 @@ class QubeAdminCLI:
                 
                 return True
             else:
+                logger.warning(f"Login failed for user: {email}")
                 print("❌ Falha no login. Verifique suas credenciais.\n")
                 return False
                 
@@ -222,9 +293,11 @@ class QubeAdminCLI:
             data["password"] = password
         
         print("\n⏳ Criando usuário...")
+        logger.info(f"Creating user: {email} - {name}")
         response = self._make_request("POST", "users/", data)
         
         if response:
+            logger.info(f"User created successfully: {email} (ID: {response.get('id')})")
             print("\n✅ Usuário criado com sucesso!")
             print(f"   ID: {response.get('id', 'N/A')}")
             print(f"   Nome: {response.get('name', 'N/A')}")
@@ -232,6 +305,7 @@ class QubeAdminCLI:
             if not password and send_email:
                 print("   📮 Email com senha temporária foi enviado")
         else:
+            logger.error(f"Failed to create user: {email}")
             print("\n❌ Falha ao criar usuário")
     
     def alterar_senha(self):
@@ -411,6 +485,12 @@ class QubeAdminCLI:
         print("║                                                            ║")
         print("╚════════════════════════════════════════════════════════════╝")
         print(f"\n🌐 API: {API_BASE_URL}")
+        
+        # Mostrar informações de log
+        if not DISABLE_LOGS:
+            print(f"📝 Logs: {LOG_FILE}")
+        else:
+            print(f"📝 Logs: Desabilitados")
         
         # Login
         if not self.login():

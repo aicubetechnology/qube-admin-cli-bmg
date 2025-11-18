@@ -426,10 +426,22 @@ environment:
 
 ### Variáveis de Ambiente
 
+#### Configuração da API
+
 | Variável | Descrição | Padrão | Prioridade |
 |----------|-----------|--------|-----------|
 | `API_HOST` | URL base da API Qube | `https://api.qube.aicube.ca` | 1 (maior) |
 | `QUBE_API_URL` | URL base da API Qube (legacy) | `https://api.qube.aicube.ca` | 2 (fallback) |
+
+#### Configuração de Logs
+
+| Variável | Descrição | Padrão | Valores |
+|----------|-----------|--------|---------|
+| `QUBE_CLI_LOG_FILE` | Caminho completo do arquivo de log | `~/.qube_cli/logs/qube_cli_YYYYMMDD.log` | Qualquer path válido |
+| `QUBE_CLI_LOG_DIR` | Diretório para logs (ignorado se LOG_FILE estiver definido) | `~/.qube_cli/logs` | Qualquer path válido |
+| `QUBE_CLI_LOG_LEVEL` | Nível de detalhe dos logs | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `QUBE_CLI_DISABLE_LOGS` | Desabilita logs em arquivo | `false` | `true` ou `false` |
+| `QUBE_CLI_DEBUG` | Exibe logs também no console (stdout) | `false` | `true` ou `false` |
 
 **Exemplos de uso:**
 
@@ -437,17 +449,25 @@ environment:
 # Ambiente de produção (padrão)
 python3 qube_admin_cli.py
 
-# Ambiente local
-API_HOST=http://localhost:8080 python3 qube_admin_cli.py
+# Ambiente local com logs em outro diretório
+API_HOST=http://localhost:8080 QUBE_CLI_LOG_DIR=/var/log/qube python3 qube_admin_cli.py
 
-# Ambiente alternativo (Qilbee)
-API_HOST=https://api.qilbee.io python3 qube_admin_cli.py
+# Ambiente alternativo (Qilbee) com arquivo de log específico
+API_HOST=https://api.qilbee.io QUBE_CLI_LOG_FILE=/tmp/qube_cli.log python3 qube_admin_cli.py
 
-# Usando variável legacy
+# Debug mode - logs no console e arquivo com nível DEBUG
+QUBE_CLI_DEBUG=true QUBE_CLI_LOG_LEVEL=DEBUG python3 qube_admin_cli.py
+
+# Sem logs em arquivo (apenas console interativo)
+QUBE_CLI_DISABLE_LOGS=true python3 qube_admin_cli.py
+
+# Usando variável legacy da API
 QUBE_API_URL=https://api.qube.aicube.ca python3 qube_admin_cli.py
 ```
 
-**Observação:** A CLI exibe a URL da API sendo utilizada no cabeçalho inicial.
+**Observações:** 
+- A CLI exibe a URL da API e o local dos logs no cabeçalho inicial
+- Logs são rotacionados diariamente por padrão (um arquivo por dia)
 
 ### Permissões Necessárias
 
