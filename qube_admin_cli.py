@@ -299,9 +299,14 @@ class QubeAdminCLI:
                     print("❌ Company ID não pode ser vazio")
                     return
             
-            # Perguntar sobre envio de email
-            send_email_input = sanitize_input(input("📮 Enviar email de boas-vindas? (S/n): ")).lower()
-            send_email = send_email_input != 'n'
+            # Se senha foi gerada automaticamente, enviar email sem perguntar
+            if not password:
+                send_email = True
+                print("📮 Email de boas-vindas será enviado automaticamente com a senha gerada.")
+            else:
+                # Perguntar sobre envio de email apenas se senha foi fornecida manualmente
+                send_email_input = sanitize_input(input("📮 Enviar email de boas-vindas? (S/n): ")).lower()
+                send_email = send_email_input != 'n'
             
         except (EOFError, KeyboardInterrupt):
             print("\n\n⚠️  Operação cancelada")
