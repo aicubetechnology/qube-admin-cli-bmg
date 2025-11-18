@@ -38,13 +38,13 @@ class QubeAdminCLI:
         
         try:
             if method.upper() == "GET":
-                response = self.session.get(url, params=data)
+                response = self.session.get(url, params=data, timeout=30)
             elif method.upper() == "POST":
-                response = self.session.post(url, json=data)
+                response = self.session.post(url, json=data, timeout=30)
             elif method.upper() == "PUT":
-                response = self.session.put(url, json=data)
+                response = self.session.put(url, json=data, timeout=30)
             elif method.upper() == "DELETE":
-                response = self.session.delete(url)
+                response = self.session.delete(url, timeout=30)
             else:
                 print(f"❌ Método HTTP inválido: {method}")
                 return None
@@ -52,20 +52,68 @@ class QubeAdminCLI:
             if response.status_code in [200, 201, 204]:
                 if response.status_code == 204:
                     return {"success": True}
-                return response.json() if response.text else {"success": True}
+                try:
+                    return response.json() if response.text else {"success": True}
+                except json.JSONDecodeError:
+                    print(f"⚠️  Resposta da API não está em formato JSON válido")
+                    return {"success": True, "raw_response": response.text}
             else:
-                error_msg = response.json() if response.text else {"detail": "Erro desconhecido"}
-                print(f"❌ Erro {response.status_code}: {error_msg.get('detail', error_msg)}")
+                # Tratar diferentes tipos de erro
+                try:
+                    error_data = response.json() if response.text else {}
+                except json.JSONDecodeError:
+                    error_data = {"detail": response.text or "Erro desconhecido"}
+                
+                error_detail = error_data.get('detail', error_data.get('message', str(error_data)))
+                
+                # Mensagens mais amigáveis por código de status
+                if response.status_code == 401:
+                    print(f"❌ Não autorizado: {error_detail}")
+                    print("💡 Dica: Verifique suas credenciais ou faça login novamente")
+                elif response.status_code == 403:
+                    print(f"❌ Acesso negado: {error_detail}")
+                    print("💡 Dica: Você não tem permissão para esta operação")
+                elif response.status_code == 404:
+                    print(f"❌ Não encontrado: {error_detail}")
+                    print(f"💡 Dica: Verifique se o endpoint existe: {url}")
+                elif response.status_code == 422:
+                    print(f"❌ Dados inválidos: {error_detail}")
+                    if isinstance(error_data, dict) and 'detail' in error_data:
+                        if isinstance(error_data['detail'], list):
+                            print("📋 Detalhes da validação:")
+                            for err in error_data['detail']:
+                                field = err.get('loc', ['unknown'])[-1]
+                                msg = err.get('msg', 'erro desconhecido')
+                                print(f"   • {field}: {msg}")
+                elif response.status_code == 500:
+                    print(f"❌ Erro interno do servidor: {error_detail}")
+                    print("💡 Dica: Contate o suporte ou tente novamente mais tarde")
+                else:
+                    print(f"❌ Erro {response.status_code}: {error_detail}")
+                
                 return None
                 
-        except requests.exceptions.ConnectionError:
-            print(f"❌ Erro de conexão. Verifique se a API está acessível: {API_BASE_URL}")
+        except requests.exceptions.ConnectionError as e:
+            print(f"\n❌ Erro de conexão com a API")
+            print(f"🌐 URL: {API_BASE_URL}")
+            print(f"💡 Dica: Verifique se:")
+            print(f"   • A API está rodando")
+            print(f"   • A URL está correta (use API_HOST para mudar)")
+            print(f"   • Você tem acesso à rede")
             return None
         except requests.exceptions.Timeout:
-            print("❌ Timeout na requisição")
+            print(f"\n❌ Timeout na requisição (>30s)")
+            print(f"💡 Dica: A API pode estar lenta ou indisponível")
             return None
+        except requests.exceptions.RequestException as e:
+            print(f"\n❌ Erro na requisição HTTP: {e}")
+            return None
+        except KeyboardInterrupt:
+            print(f"\n\n⚠️  Operação cancelada pelo usuário")
+            raise  # Re-lança para ser tratado no nível superior
         except Exception as e:
-            print(f"❌ Erro inesperado: {e}")
+            print(f"\n❌ Erro inesperado: {type(e).__name__}: {e}")
+            print(f"💡 Dica: Se o problema persistir, reporte este erro")
             return None
     
     def login(self) -> bool:
@@ -74,8 +122,25 @@ class QubeAdminCLI:
         print("🔐  QUBE ADMIN CLI - LOGIN")
         print("="*60)
         
-        email = input("📧 Email: ").strip()
-        password = getpass("🔑 Senha: ")
+        try:
+            email = input("📧 Email: ").strip()
+            
+            if not email:
+                print("❌ Email não pode ser vazio")
+                return False
+            
+            password = getpass("🔑 Senha: ")
+            
+            if not password:
+                print("❌ Senha não pode ser vazia")
+                return False
+            
+        except EOFError:
+            print("\n\n❌ Entrada cancelada (EOF)")
+            return False
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Login cancelado pelo usuário")
+            return False
         
         data = {
             "email": email,
@@ -83,24 +148,30 @@ class QubeAdminCLI:
         }
         
         print("\n⏳ Autenticando...")
-        response = self._make_request("POST", "auth/login", data, require_auth=False)
         
-        if response and "access_token" in response:
-            self.token = response["access_token"]
-            print("✅ Login realizado com sucesso!\n")
+        try:
+            response = self._make_request("POST", "auth/login", data, require_auth=False)
             
-            # Buscar informações do usuário
-            user_response = self._make_request("GET", "users/me")
-            if user_response:
-                self.user_info = user_response
-                print(f"👤 Usuário: {self.user_info.get('name', 'N/A')}")
-                print(f"📧 Email: {self.user_info.get('email', 'N/A')}")
-                print(f"🏢 Empresa: {self.user_info.get('company_name', 'N/A')}")
-                print(f"👔 Role: {self.user_info.get('role', 'N/A')}")
-            
-            return True
-        else:
-            print("❌ Falha no login. Verifique suas credenciais.\n")
+            if response and "access_token" in response:
+                self.token = response["access_token"]
+                print("✅ Login realizado com sucesso!\n")
+                
+                # Buscar informações do usuário
+                user_response = self._make_request("GET", "users/me")
+                if user_response:
+                    self.user_info = user_response
+                    print(f"👤 Usuário: {self.user_info.get('name', 'N/A')}")
+                    print(f"📧 Email: {self.user_info.get('email', 'N/A')}")
+                    print(f"🏢 Empresa: {self.user_info.get('company_name', 'N/A')}")
+                    print(f"👔 Role: {self.user_info.get('role', 'N/A')}")
+                
+                return True
+            else:
+                print("❌ Falha no login. Verifique suas credenciais.\n")
+                return False
+                
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Login cancelado pelo usuário")
             return False
     
     def criar_usuario(self):
@@ -109,19 +180,35 @@ class QubeAdminCLI:
         print("➕ CRIAR NOVO USUÁRIO")
         print("="*60)
         
-        email = input("📧 Email do usuário: ").strip()
-        name = input("👤 Nome completo: ").strip()
-        password = getpass("🔑 Senha (deixe vazio para gerar automaticamente): ")
-        
-        # Usar company_id do usuário logado
-        company_id = self.user_info.get("company_id") if self.user_info else None
-        
-        if not company_id:
-            company_id = input("🏢 Company ID: ").strip()
-        
-        # Perguntar sobre envio de email
-        send_email_input = input("📮 Enviar email de boas-vindas? (S/n): ").strip().lower()
-        send_email = send_email_input != 'n'
+        try:
+            email = input("📧 Email do usuário: ").strip()
+            if not email:
+                print("❌ Email não pode ser vazio")
+                return
+            
+            name = input("👤 Nome completo: ").strip()
+            if not name:
+                print("❌ Nome não pode ser vazio")
+                return
+            
+            password = getpass("🔑 Senha (deixe vazio para gerar automaticamente): ")
+            
+            # Usar company_id do usuário logado
+            company_id = self.user_info.get("company_id") if self.user_info else None
+            
+            if not company_id:
+                company_id = input("🏢 Company ID: ").strip()
+                if not company_id:
+                    print("❌ Company ID não pode ser vazio")
+                    return
+            
+            # Perguntar sobre envio de email
+            send_email_input = input("📮 Enviar email de boas-vindas? (S/n): ").strip().lower()
+            send_email = send_email_input != 'n'
+            
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n⚠️  Operação cancelada")
+            return
         
         data = {
             "email": email,
@@ -153,9 +240,22 @@ class QubeAdminCLI:
         print("🔐 ALTERAR SENHA")
         print("="*60)
         
-        current_password = getpass("🔑 Senha atual: ")
-        new_password = getpass("🔑 Nova senha (mínimo 8 caracteres): ")
-        confirm_password = getpass("🔑 Confirme a nova senha: ")
+        try:
+            current_password = getpass("🔑 Senha atual: ")
+            if not current_password:
+                print("❌ Senha atual não pode ser vazia")
+                return
+            
+            new_password = getpass("🔑 Nova senha (mínimo 8 caracteres): ")
+            if not new_password:
+                print("❌ Nova senha não pode ser vazia")
+                return
+            
+            confirm_password = getpass("🔑 Confirme a nova senha: ")
+            
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n⚠️  Operação cancelada")
+            return
         
         if new_password != confirm_password:
             print("❌ As senhas não coincidem!")
@@ -230,7 +330,10 @@ class QubeAdminCLI:
                 return
             selected_user = usuarios[user_choice - 1]
         except ValueError:
-            print("❌ Entrada inválida!")
+            print("❌ Entrada inválida! Digite apenas números")
+            return
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n⚠️  Operação cancelada")
             return
         
         # Listar workers
@@ -253,7 +356,10 @@ class QubeAdminCLI:
                 return
             selected_agent = agents[agent_choice - 1]
         except ValueError:
-            print("❌ Entrada inválida!")
+            print("❌ Entrada inválida! Digite apenas números")
+            return
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n⚠️  Operação cancelada")
             return
         
         # Confirmar associação
@@ -261,7 +367,12 @@ class QubeAdminCLI:
         print(f"   Usuário: {selected_user.get('name')} ({selected_user.get('email')})")
         print(f"   Worker: {selected_agent.get('name')}")
         
-        confirm = input("\n   Continuar? (S/n): ").strip().lower()
+        try:
+            confirm = input("\n   Continuar? (S/n): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n⚠️  Operação cancelada")
+            return
+        
         if confirm == 'n':
             print("❌ Operação cancelada")
             return
@@ -322,21 +433,48 @@ class QubeAdminCLI:
                     print("\n👋 Até logo!\n")
                     sys.exit(0)
                 else:
-                    print("\n❌ Opção inválida!")
+                    print("\n❌ Opção inválida! Escolha 1, 2, 3 ou 0")
                 
-                input("\n⏎ Pressione ENTER para continuar...")
+                # Pausa para continuar (com tratamento de erro)
+                try:
+                    input("\n⏎ Pressione ENTER para continuar...")
+                except (EOFError, KeyboardInterrupt):
+                    print("\n\n👋 Saindo...\n")
+                    sys.exit(0)
                 
+            except EOFError:
+                print("\n\n❌ Entrada cancelada (EOF)")
+                print("👋 Saindo...\n")
+                sys.exit(0)
             except KeyboardInterrupt:
                 print("\n\n👋 Saindo...\n")
                 sys.exit(0)
             except Exception as e:
-                print(f"\n❌ Erro inesperado: {e}")
-                input("\n⏎ Pressione ENTER para continuar...")
+                print(f"\n❌ Erro inesperado: {type(e).__name__}: {e}")
+                print(f"💡 Dica: Se o problema persistir, reporte este erro")
+                try:
+                    input("\n⏎ Pressione ENTER para continuar...")
+                except (EOFError, KeyboardInterrupt):
+                    print("\n\n👋 Saindo...\n")
+                    sys.exit(0)
 
 
 def main():
-    cli = QubeAdminCLI()
-    cli.run()
+    """Função principal com tratamento de erros global"""
+    try:
+        cli = QubeAdminCLI()
+        cli.run()
+    except KeyboardInterrupt:
+        print("\n\n👋 Programa interrompido pelo usuário. Até logo!\n")
+        sys.exit(0)
+    except EOFError:
+        print("\n\n❌ Entrada cancelada (EOF). Encerrando...\n")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n\n💥 Erro fatal não tratado!")
+        print(f"❌ {type(e).__name__}: {e}")
+        print(f"\n💡 Por favor, reporte este erro ao suporte com os detalhes acima")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
