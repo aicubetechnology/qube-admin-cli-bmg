@@ -9,6 +9,7 @@ import json
 import sys
 import os
 import logging
+import re
 from datetime import datetime
 from getpass import getpass
 from typing import Optional, Dict, Any
@@ -63,6 +64,17 @@ logging.basicConfig(
 logger = logging.getLogger("QubeCLI")
 
 
+# Função para limpar sequências de escape ANSI dos inputs
+def sanitize_input(text: str) -> str:
+    """Remove sequências de escape ANSI e caracteres de controle do input"""
+    # Remove sequências ESC (ANSI escape codes)
+    ansi_escape = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]|\x1b\?[0-9;]*[a-zA-Z]')
+    cleaned = ansi_escape.sub('', text)
+    # Remove outros caracteres de controle
+    cleaned = re.sub(r'[\x00-\x1f\x7f]', '', cleaned)
+    return cleaned.strip()
+
+
 class QubeAdminCLI:
     def __init__(self):
         self.token: Optional[str] = None
@@ -70,7 +82,7 @@ class QubeAdminCLI:
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
         logger.info(f"CLI iniciada. API: {API_BASE_URL}")
-        logger.info(f"Log file: {LOG_FILE}")
+        logger.info(f"Log file: {LOG_FILE if not DISABLE_LOGS else 'Disabled'}")
     
     def _make_url(self, endpoint: str) -> str:
         """Constrói a URL completa da API"""
@@ -188,7 +200,7 @@ class QubeAdminCLI:
         print("="*60)
         
         try:
-            email = input("📧 Email: ").strip()
+            email = sanitize_input(input("📧 Email: "))
             
             if not email:
                 logger.warning("Login attempt with empty email")
@@ -252,12 +264,12 @@ class QubeAdminCLI:
         print("="*60)
         
         try:
-            email = input("📧 Email do usuário: ").strip()
+            email = sanitize_input(input("📧 Email do usuário: "))
             if not email:
                 print("❌ Email não pode ser vazio")
                 return
             
-            name = input("👤 Nome completo: ").strip()
+            name = sanitize_input(input("👤 Nome completo: "))
             if not name:
                 print("❌ Nome não pode ser vazio")
                 return
@@ -268,13 +280,13 @@ class QubeAdminCLI:
             company_id = self.user_info.get("company_id") if self.user_info else None
             
             if not company_id:
-                company_id = input("🏢 Company ID: ").strip()
+                company_id = sanitize_input(input("🏢 Company ID: "))
                 if not company_id:
                     print("❌ Company ID não pode ser vazio")
                     return
             
             # Perguntar sobre envio de email
-            send_email_input = input("📮 Enviar email de boas-vindas? (S/n): ").strip().lower()
+            send_email_input = sanitize_input(input("📮 Enviar email de boas-vindas? (S/n): ")).lower()
             send_email = send_email_input != 'n'
             
         except (EOFError, KeyboardInterrupt):
@@ -398,7 +410,7 @@ class QubeAdminCLI:
         
         # Selecionar usuário
         try:
-            user_choice = int(input("\n👤 Selecione o número do usuário: ").strip())
+            user_choice = int(sanitize_input(input("\n👤 Selecione o número do usuário: ")))
             if user_choice < 1 or user_choice > len(usuarios):
                 print("❌ Seleção inválida!")
                 return
@@ -424,7 +436,7 @@ class QubeAdminCLI:
         
         # Selecionar worker
         try:
-            agent_choice = int(input("\n🤖 Selecione o número do worker: ").strip())
+            agent_choice = int(sanitize_input(input("\n🤖 Selecione o número do worker: ")))
             if agent_choice < 1 or agent_choice > len(agents):
                 print("❌ Seleção inválida!")
                 return
@@ -442,7 +454,7 @@ class QubeAdminCLI:
         print(f"   Worker: {selected_agent.get('name')}")
         
         try:
-            confirm = input("\n   Continuar? (S/n): ").strip().lower()
+            confirm = sanitize_input(input("\n   Continuar? (S/n): ")).lower()
         except (EOFError, KeyboardInterrupt):
             print("\n\n⚠️  Operação cancelada")
             return
@@ -501,7 +513,7 @@ class QubeAdminCLI:
             self.mostrar_menu()
             
             try:
-                opcao = input("\n➤ Escolha uma opção: ").strip()
+                opcao = sanitize_input(input("\n➤ Escolha uma opção: "))
                 
                 if opcao == "1":
                     self.criar_usuario()
