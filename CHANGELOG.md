@@ -5,6 +5,59 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [1.4.0] - 2025-11-14
+
+### Adicionado
+- **Modo debug completo (`QUBE_CLI_DEBUG`)**
+  - Exibe URL completa das requisições
+  - Mostra método HTTP utilizado (GET, POST, PUT, DELETE)
+  - Exibe parâmetros enviados (query string ou body)
+  - Mostra status code das respostas (200, 401, 404, etc.)
+  - Exibe estrutura do JSON retornado pela API
+  - Informações detalhadas em tempo real no console
+
+- **Suporte a múltiplos formatos de resposta da API**
+  - Lista direta de usuários (formato atual da API)
+  - Dicionário com chave "users" (formato legacy)
+  - Dicionário com chave "data" (formato alternativo)
+
+- **Variável de ambiente `API_HOST`**
+  - Prioridade sobre `QUBE_API_URL` (mantida para compatibilidade)
+  - Suporte a múltiplos ambientes:
+    - `http://localhost:8080` - Desenvolvimento local
+    - `https://api.qube.aicube.ca` - Produção
+    - `https://api.qilbee.io` - Ambiente alternativo
+  - API em uso é exibida no cabeçalho da CLI
+
+- **QUICK_START.md**
+  - Guia rápido de instalação
+  - Exemplos de configuração de ambiente
+  - Seção de resolução de problemas
+
+### Corrigido
+- **Listagem de usuários retornando vazia**
+  - API retorna lista direta, não dicionário com chave "users"
+  - Método `listar_usuarios()` agora aceita múltiplos formatos
+  - Método `_make_request()` agora usa parâmetro `params` para GET requests
+  - 65 usuários listados com sucesso após correção
+
+- **Sanitização de inputs com caracteres ANSI**
+  - Remove sequências de escape ANSI de todos os inputs
+  - Limpa caracteres de controle do terminal
+  - Previne problemas com validação de email e outros campos
+
+### Melhorado
+- **UX na criação de usuários**
+  - Email de boas-vindas enviado automaticamente quando senha é gerada
+  - Pergunta sobre email apenas quando senha é fornecida manualmente
+  - Mensagem informativa: "📮 Email de boas-vindas será enviado automaticamente com a senha gerada."
+  - Reduz passos desnecessários e evita erro de não enviar senha gerada
+
+- **Debug e troubleshooting**
+  - Modo debug muito mais verboso e útil
+  - Logs detalhados de requisições e respostas
+  - Facilita identificação de problemas de integração com API
+
 ## [1.3.0] - 2024-11-18
 
 ### Adicionado
