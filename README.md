@@ -426,9 +426,28 @@ environment:
 
 ### Variáveis de Ambiente
 
-| Variável | Descrição | Padrão |
-|----------|-----------|--------|
-| `QUBE_API_URL` | URL base da API Qube | `https://api.qube.aicube.ca` |
+| Variável | Descrição | Padrão | Prioridade |
+|----------|-----------|--------|-----------|
+| `API_HOST` | URL base da API Qube | `https://api.qube.aicube.ca` | 1 (maior) |
+| `QUBE_API_URL` | URL base da API Qube (legacy) | `https://api.qube.aicube.ca` | 2 (fallback) |
+
+**Exemplos de uso:**
+
+```bash
+# Ambiente de produção (padrão)
+python3 qube_admin_cli.py
+
+# Ambiente local
+API_HOST=http://localhost:8080 python3 qube_admin_cli.py
+
+# Ambiente alternativo (Qilbee)
+API_HOST=https://api.qilbee.io python3 qube_admin_cli.py
+
+# Usando variável legacy
+QUBE_API_URL=https://api.qube.aicube.ca python3 qube_admin_cli.py
+```
+
+**Observação:** A CLI exibe a URL da API sendo utilizada no cabeçalho inicial.
 
 ### Permissões Necessárias
 

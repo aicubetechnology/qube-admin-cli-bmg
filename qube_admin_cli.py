@@ -12,7 +12,8 @@ from getpass import getpass
 from typing import Optional, Dict, Any
 
 # Configurações da API
-API_BASE_URL = os.getenv("QUBE_API_URL", "https://api.qube.aicube.ca")
+# Prioridade: API_HOST > QUBE_API_URL > default
+API_BASE_URL = os.getenv("API_HOST", os.getenv("QUBE_API_URL", "https://api.qube.aicube.ca"))
 API_VERSION = "v1"
 
 
@@ -298,6 +299,7 @@ class QubeAdminCLI:
         print("║         Gerenciamento de Usuários e Workers               ║")
         print("║                                                            ║")
         print("╚════════════════════════════════════════════════════════════╝")
+        print(f"\n🌐 API: {API_BASE_URL}")
         
         # Login
         if not self.login():
